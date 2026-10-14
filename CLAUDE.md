@@ -20,8 +20,11 @@ and help him diagnose rather than just fix.
   and carousel children. Videos return **no** `media_url`, only `thumbnail_url`.
 - Requires Instagram API **with Facebook Login** + a token with `business_management`, because the
   Page sits in a business portfolio. Without it, `me/accounts` returns empty.
-- Hashtag search: lookup works (app has access). `recent_media` with 25 posts + children returned
-  "reduce the amount of data"; keep per-call limits small.
+- Hashtag search works (2026-10-14): `ig_hashtag_search` + `recent_media` with 5 posts + children
+  returned fresh posts with images (~4% of hourly usage per call). 25 posts + children failed with
+  "reduce the amount of data". Busy tags (#golffashion) produce ~5 posts per 30 min.
+- X-App-Usage cost scales with response size, not call count: 1-post Business Discovery calls
+  cost ~0.25%, 5-post calls with children ~2-3%.
 
 ## Conventions
 
