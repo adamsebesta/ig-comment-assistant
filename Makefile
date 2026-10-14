@@ -1,4 +1,4 @@
-.PHONY: bootstrap up down build ns secrets tone deploy model rollout ui ingest-now worker-now logs psql probe long-token argocd argocd-repo argocd-app argocd-password argocd-ui eval
+.PHONY: bootstrap up down build ns secrets tone deploy model rollout ui ingest-now worker-now logs psql probe long-token argocd argocd-repo argocd-app argocd-password argocd-ui eval draft-eval
 
 CLUSTER ?= ica
 NS      ?= ica
@@ -87,6 +87,9 @@ logs:
 # image). Compare models: make eval EVAL_MODEL=qwen2.5vl:7b
 eval:
 	$(KUBECTL) -n $(NS) exec -i deploy/web -- env EVAL_MODEL=$(EVAL_MODEL) python -m ica.eval < seeds/eval.yaml
+
+draft-eval:
+	$(KUBECTL) -n $(NS) exec -i deploy/web -- env EVAL_MODEL=$(EVAL_MODEL) python -m ica.drafteval < seeds/eval.yaml
 
 psql:
 	$(KUBECTL) -n $(NS) exec -it statefulset/postgres -- psql -U ica ica

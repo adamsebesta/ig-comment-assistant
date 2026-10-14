@@ -7,13 +7,14 @@ makes the model return parseable JSON instead of prose we'd have to regex.
 import base64
 import io
 import json
+import re
 
 import httpx
 from PIL import Image
 
 from . import config
 
-PROMPT_VERSION = "v5"  # bump when prompts change, so decisions can be compared per version
+PROMPT_VERSION = "v6"  # bump when prompts change, so decisions can be compared per version
 
 MOODS = ["celebratory", "debate", "product", "news", "instructional", "humour", "other"]
 
@@ -95,23 +96,58 @@ STANCES = {
              "compliment on the outfit or trousers, peer to peer, then optionally one insight.",
 }
 
-DRAFT_RULES = """
-Write 3 distinct Instagram comments for the brand account to post on this post.
-Rules:
-- Add value to the conversation: an observation, a detail about cut, cloth or fit, a bit of golf history, or a genuine question.
-- Never mention the brand, never sell, no links, at most one emoji.
-- No hashtags, unless the Voice section above allows a signature tag.
-- If the Voice section defines registers, write one comment in each.
-- Follow the Voice and Never sections above exactly.
-- Under 200 characters each. Sound like a knowledgeable person, not a marketer.
-- Match the post's mood. In a debate, take a considered position without being combative.
-- Don't reuse phrasing from the recent comments listed."""
-
-DRAFT_SCHEMA = {
-    "type": "object",
-    "properties": {"comments": {"type": "array", "items": {"type": "string"}}},
-    "required": ["comments"],
+# Which registers to draft, per pillar. Named JSON fields (not "3 comments")
+# force three genuinely different comments instead of three rewordings.
+REGISTERS = {
+    "general": ["punchy", "insightful", "contemplative"],
+    "brand": ["compliment", "punchy", "insightful"],
+    "style": ["compliment", "punchy", "insightful"],
 }
+
+DRAFT_RULES = """
+Write Instagram comments for the brand account to post on this post, one per register
+named below, as described in the Voice section above.
+Rules:
+- Add value: an observation, a specific compliment, a detail about cut, cloth or fit, or a genuine question.
+- Never mention the brand, never sell, no links, at most one emoji.
+- No hashtags, unless the Voice section allows a signature tag.
+- Under 80 characters each. No filler phrases.
+- Carry the brand's beliefs in your own fresh words. Never copy phrases from the brand
+  context, the example comments, the caption or our recent comments.
+- Match the post's mood. In a debate, take a considered position without being combative."""
+
+MAX_DRAFT_CHARS = 120  # hard ceiling enforced in code; the prompt asks for 80
+NGRAM = 4  # sharing this many consecutive words with the tone file = verbatim copy
+
+
+def _words(text):
+    return re.findall(r"[a-z0-9']+", text.lower())
+
+
+def _ngrams(text, n=NGRAM):
+    w = _words(text)
+    return {tuple(w[i:i + n]) for i in range(len(w) - n + 1)}
+
+
+def _norm(text):
+    return " ".join(_words(text))
+
+
+def check_draft(text, corpus_ngrams, corpus_lines=frozenset()):
+    """Returns why a draft is rejected, or None. Enforced in code because a
+    prompt can only ask: "never verbatim" has to be checked, not hoped for.
+    corpus_lines catches exact copies too short for n-grams ("Super solid!"):
+    the same comment on many posts is exactly what spam detection looks for."""
+    if _norm(text) in corpus_lines:
+        return "exact copy of an example or recent comment"
+    if len(text) > MAX_DRAFT_CHARS:
+        return f"too long ({len(text)} chars)"
+    copied = _ngrams(text) & corpus_ngrams
+    if copied:
+        return "copies '" + " ".join(next(iter(copied))) + "'"
+    if re.search(r"(?i)\b(sale|discount|shop|link in bio|dm us)\b", text):
+        return "promotional language"
+    return None
 
 
 def chat(messages, schema, temperature):
@@ -164,14 +200,43 @@ def score(post, tone="", category="general"):
 
 
 def draft(post, scored, tone, recent, category="general"):
+    """Returns (accepted drafts, rejected [(text, reason)]). One retry, told what
+    was rejected and why, before giving up on a register."""
+    registers = REGISTERS.get(category, REGISTERS["general"])
+    schema = {"type": "object", "properties": {r: {"type": "string"} for r in registers},
+              "required": registers}
     recent_block = "\n".join(f"- {t}" for t in recent) or "(none yet)"
-    extra = (
-        f"\n\nApproach: {STANCES.get(category, STANCES['general'])}"
-        f"\nMood: {scored['mood']}\nWhat the post shows: {scored['reason']}"
-        f"\n\nRecent comments we've posted:\n{recent_block}"
-    )
-    out = chat(
-        [{"role": "system", "content": tone + "\n" + DRAFT_RULES}, _post_message(post, extra)],
-        DRAFT_SCHEMA, 0.8,
-    )
-    return [c.strip() for c in out["comments"] if c.strip()][:3]
+    corpus = _ngrams(tone) | _ngrams(post["caption"] or "")
+    for t in recent:
+        corpus |= _ngrams(t)
+    lines = {_norm(l.lstrip("-* ").strip('"')) for l in tone.splitlines() + list(recent)}
+    lines |= {_norm(q) for q in re.findall(r'"([^"]+)"', tone)}
+    lines.discard("")
+
+    accepted, rejected, feedback = {}, [], ""
+    for _attempt in range(2):
+        missing = [r for r in registers if r not in accepted]
+        extra = (
+            f"\n\nApproach: {STANCES.get(category, STANCES['general'])}"
+            f"\nMood: {scored['mood']}\nWhat the post shows: {scored['reason']}"
+            f"\nRegisters to write: {', '.join(missing)}"
+            f"\n\nRecent comments we've posted (don't repeat them):\n{recent_block}{feedback}"
+        )
+        out = chat(
+            [{"role": "system", "content": tone + "\n" + DRAFT_RULES}, _post_message(post, extra)],
+            {**schema, "properties": {r: schema["properties"][r] for r in missing}, "required": missing},
+            0.8,
+        )
+        notes = []
+        for r in missing:
+            text = (out.get(r) or "").strip().strip('"')
+            why = check_draft(text, corpus, lines) if text else "empty"
+            if why:
+                rejected.append((text, why))
+                notes.append(f"- your {r} draft \"{text}\" was rejected: {why}")
+            else:
+                accepted[r] = text
+        if len(accepted) == len(registers):
+            break
+        feedback = "\n\nRewrite these, fixing the problem:\n" + "\n".join(notes)
+    return [accepted[r] for r in registers if r in accepted], rejected

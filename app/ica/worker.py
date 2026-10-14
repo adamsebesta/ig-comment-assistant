@@ -69,7 +69,9 @@ def main():
                          p["id"], s["relevance"], p["category"], sig["clothing_focus"],
                          sig["trousers_visible"], ",".join(sig["topics"]) or "-", s["reason"])
                 continue
-            comments = llm.draft(p, s, tone, recent, p["category"])
+            comments, rejected = llm.draft(p, s, tone, recent, p["category"])
+            for text, why in rejected:
+                log.info("post %s draft rejected (%s): %s", p["id"], why, text)
             for c in comments:
                 conn.execute(
                     "INSERT INTO drafts (post_id, text, prompt_version, model) VALUES (%s, %s, %s, %s)",
