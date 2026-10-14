@@ -120,6 +120,7 @@ Rules:
   context, the example comments, the caption or our recent comments.
 - Match the post's mood. In a debate, take a considered position without being combative."""
 
+DRAFT_ATTEMPTS = 4
 MAX_DRAFT_CHARS = 70  # hard ceiling; real comments are short (ours: 12-65 chars)
 NGRAM = 4  # sharing this many consecutive words with the tone file = verbatim copy
 # Short example comments are templates the model loves to reword ("relaxed fit,
@@ -220,8 +221,9 @@ def score(post, tone="", category="general"):
 
 
 def draft(post, scored, tone, recent, category="general"):
-    """Returns (accepted drafts, rejected [(text, reason)]). One retry, told what
-    was rejected and why, before giving up on a register."""
+    """Returns (accepted drafts, rejected [(text, reason)]). Up to DRAFT_ATTEMPTS
+    rounds; each retry is told exactly what was rejected and why. Cheap on a GPU
+    (~2-3 s per round), and the model reliably over-writes on the first try."""
     registers = REGISTERS.get(category, REGISTERS["general"])
     schema = {"type": "object", "properties": {r: {"type": "string"} for r in registers},
               "required": registers}
@@ -238,7 +240,7 @@ def draft(post, scored, tone, recent, category="general"):
     lines.discard("")
 
     accepted, rejected, feedback = {}, [], ""
-    for _attempt in range(2):
+    for _attempt in range(DRAFT_ATTEMPTS):
         missing = [r for r in registers if r not in accepted]
         extra = (
             f"\n\nApproach: {STANCES.get(category, STANCES['general'])}"
@@ -262,5 +264,6 @@ def draft(post, scored, tone, recent, category="general"):
                 accepted[r] = text
         if len(accepted) == len(registers):
             break
-        feedback = "\n\nRewrite these, fixing the problem:\n" + "\n".join(notes)
+        feedback = ("\n\nRewrite these, fixing the problem. Shorter: a few casual words, "
+                    "like a real person typing on their phone:\n" + "\n".join(notes))
     return [accepted[r] for r in registers if r in accepted], rejected
