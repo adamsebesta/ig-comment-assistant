@@ -23,11 +23,18 @@ web (FastAPI)            ─► queue ─► approve/edit/reject ─► copy + o
 
 ## Local MVP quickstart
 
-Needs: Docker Desktop (≥8 GB RAM), kind, kubectl.
+Needs: Docker Desktop, kind, kubectl, and [Ollama](https://ollama.com) running natively on the Mac.
+The models run on the Mac's GPU (Metal), not in kind: Docker can't pass the Apple GPU into
+containers, and CPU inference inside Docker's VM took minutes per post and starved the host.
 
 ```bash
+brew install ollama && brew services start ollama
+ollama pull qwen2.5vl:7b     # scoring (vision)
+ollama pull qwen3:14b        # drafting (text)
+# optional: one model in memory at a time
+#   add OLLAMA_MAX_LOADED_MODELS=1 to ~/Library/LaunchAgents/sh.brew.ollama.plist
 cp .env.example .env              # fill in META_TOKEN (and app id/secret for long-token)
-make bootstrap                    # cluster, image, secrets, tone, manifests, model pull
+make bootstrap                    # cluster, image, secrets, tone, manifests
 make ui                           # http://localhost:8000 → Sources → paste seeds/handles.example.txt
 make ingest-now && make logs      # don't wait for the schedule
 make worker-now && make logs      # scoring on CPU is slow: ~30-60 s per post

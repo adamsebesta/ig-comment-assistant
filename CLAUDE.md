@@ -26,6 +26,19 @@ and help him diagnose rather than just fix.
 - X-App-Usage cost scales with response size, not call count: 1-post Business Discovery calls
   cost ~0.25%, 5-post calls with children ~2-3%.
 
+## Runtime facts (2026-10-14)
+
+- Models run in Ollama natively on the Mac (Metal), reached from Pods via a selector-less
+  `ollama` Service + hand-written EndpointSlice (192.168.65.254). Use the full DNS name
+  `ollama.ica.svc.cluster.local`: Ollama rejects Host headers that aren't localhost/IP/*.local.
+  Scoring qwen2.5vl:7b (3B failed eval), drafting qwen3:14b (text-only, clearly better drafts).
+- Argo CD syncs `k8s/local/` from GitHub main with selfHeal: change YAML + push, never kubectl edit.
+  `make rollout` is still needed for code (Argo doesn't build images).
+- Meta token is a system-user token (Employee role, read-only scopes). Expires ~2026-12-13:
+  regenerate in Business Settings → System users → comment-assistant → Generate token.
+- Hashtag results never include the owner or a video cover frame: hashtag Reels are caption-only,
+  and follower counts can't be checked (engagement floor is the proxy).
+
 ## Conventions
 
 - Plain YAML manifests in `k8s/local/` for now; Helm/Argo CD when this moves to EKS.
