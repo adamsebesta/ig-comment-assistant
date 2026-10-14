@@ -132,7 +132,11 @@ def outcome(decision_id: int, likes: int = Form(...), replies: int = Form(...)):
 @app.get("/sources")
 def sources(request: Request):
     with db.connect() as conn:
-        rows = conn.execute("SELECT * FROM sources ORDER BY kind, category, tier, value").fetchall()
+        rows = conn.execute(
+            "SELECT s.*, count(p.id) FILTER (WHERE (p.signals->>'ai_generated')::boolean) AS ai_posts "
+            "FROM sources s LEFT JOIN posts p ON p.source_id = s.id "
+            "GROUP BY s.id ORDER BY s.kind, s.category, s.tier, s.value"
+        ).fetchall()
         used = db.hashtag_budget_used(conn)
     return templates.TemplateResponse(
         request, "sources.html", {"rows": rows, "used": used, "budget": config.HASHTAG_BUDGET}

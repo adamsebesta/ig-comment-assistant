@@ -38,6 +38,7 @@
         {% if s.get('last_error') %}<div class="err">{{ s.errors }} error(s), last: {{ s.last_error[:140] }}</div>{% endif %}
       {% else %}
         scored {{ s.get('scored', 0) }} · <strong>{{ s.get('queued', 0) }} queued</strong> · {{ s.get('skipped', 0) }} skipped
+        {% if s.get('ai_flagged') %}· {{ s.ai_flagged }} AI-generated excluded{% endif %}
         {% if s.get('drafts_rejected') %}· {{ s.drafts_rejected }} drafts rejected by checks{% endif %}
         {% if s.get('errors') %}<div class="err">{{ s.errors }} error(s)</div>{% endif %}
       {% endif %}

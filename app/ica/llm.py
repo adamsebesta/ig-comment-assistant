@@ -14,7 +14,7 @@ from PIL import Image
 
 from . import config
 
-PROMPT_VERSION = "v8"  # bump when prompts change, so decisions can be compared per version
+PROMPT_VERSION = "v9"  # bump when prompts change, so decisions can be compared per version
 
 MOODS = ["celebratory", "debate", "product", "news", "instructional", "humour", "other"]
 
@@ -39,8 +39,12 @@ trousers_visible: can you clearly see a person's trousers in the image? true or 
 topics: which of these the post actually touches (can be empty): trousers_and_fit,
   full_outfit, cloth_and_fibre, craft_and_details, style_change_or_debate, classic_style,
   course_to_dinner.
-exclusion: "competitor_ad" if it is an advert for another clothing brand's product,
-  "sensitive" if it involves injury, death, politics or tragedy, otherwise "none".
+exclusion: "competitor_ad" if a clothing brand is promoting its own product: an advert, a
+  campaign shot, a collection launch, "shop now", a celebrity or model wearing the brand for it.
+  "sensitive" if it involves injury, death, politics or tragedy. Otherwise "none".
+audience: whose clothes are shown: "men", "women", "mixed", or "none".
+looks_ai_generated: true if the person or image looks AI-generated or CGI: waxy or too-perfect
+  skin, impossible details, a synthetic studio look, a fake magazine cover, a virtual influencer.
 mood: the post's mood.
 reason: one short sentence describing what the post shows."""
 
@@ -51,14 +55,23 @@ SCORE_SCHEMA = {
         "trousers_visible": {"type": "boolean"},
         "topics": {"type": "array", "items": {"type": "string", "enum": TOPICS}},
         "exclusion": {"type": "string", "enum": ["none", "competitor_ad", "sensitive"]},
+        "audience": {"type": "string", "enum": ["men", "women", "mixed", "none"]},
+        "looks_ai_generated": {"type": "boolean"},
         "mood": {"type": "string", "enum": MOODS},
         "reason": {"type": "string"},
     },
-    "required": ["clothing_focus", "trousers_visible", "topics", "exclusion", "mood", "reason"],
+    "required": ["clothing_focus", "trousers_visible", "topics", "exclusion", "audience",
+                 "looks_ai_generated", "mood", "reason"],
 }
 
 
 CATEGORIES = ("general", "brand", "style")
+
+
+# Captions often admit it even when the image is convincing. Checked in code,
+# because a vision model's AI-image judgement is unreliable on its own.
+AI_CAPTION = re.compile(r"(?i)(#ai(art|generated|model|influencer|fashion|photography|girl|beauty)?\b|\bai[- ]generated\b|\bvirtual (influencer|model)\b|"
+                        r"\bmidjourney\b|\bstable diffusion\b|\bmade with ai\b|\bai (model|art|fashion)\b)")
 
 
 def relevance(sig, category):
@@ -69,8 +82,12 @@ def relevance(sig, category):
                competitor_ad exclusion doesn't apply; we're there to appreciate the work.
       style:   creators/golfers. Trousers or a full outfit must be on show."""
     exclusion = sig["exclusion"]
+    if sig.get("ai_generated") or sig.get("looks_ai_generated"):
+        return 0.0  # never engage with AI-generated people/accounts
     if exclusion == "sensitive" or (exclusion == "competitor_ad" and category != "brand"):
         return 0.0
+    if sig.get("audience") == "women":
+        return 0.1  # menswear brand: womenswear-only posts aren't our conversation
     n = len(set(sig["topics"]))
     central = sig["clothing_focus"] == "central"
     if category == "style":
@@ -217,6 +234,7 @@ def _shrink(raw):
 def score(post, tone="", category="general"):
     sig = chat([{"role": "system", "content": tone + "\n\n" + SCORE_PROMPT}, _post_message(post)], SCORE_SCHEMA, 0)
     sig["topics"] = [t for t in sig["topics"] if t in TOPICS]
+    sig["ai_generated"] = bool(sig.get("looks_ai_generated") or AI_CAPTION.search(post["caption"] or ""))
     return {"relevance": relevance(sig, category), "mood": sig["mood"], "reason": sig["reason"], "signals": sig}
 
 

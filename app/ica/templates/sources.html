@@ -19,7 +19,8 @@ A new hashtag holds its slot for 7 days after its first query.</p>
   {% for s in rows %}
   <tr>
     <td>{{ "@" if s.kind == "handle" else "#" }}{{ s.value }}
-      {% if s.last_error %}<div class="err">{{ s.last_error }}</div>{% endif %}</td>
+      {% if s.last_error %}<div class="err">{{ s.last_error }}</div>{% endif %}
+      {% if s.ai_posts %}<div class="err">{{ s.ai_posts }} AI-generated post(s): consider removing</div>{% endif %}</td>
     <td class="meta">{{ s.category }}</td>
     <td class="meta">{{ s.tier if s.kind == "handle" else "every 2h" }}</td>
     <td class="meta">{{ s.last_polled.strftime("%d %b %H:%M") if s.last_polled else "never" }}</td>

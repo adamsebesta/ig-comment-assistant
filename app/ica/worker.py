@@ -73,9 +73,12 @@ def score_all(conn, posts, tone, recent, run):
             if not relevant:
                 run.add("skipped")
                 sig = s["signals"]
-                log.info("post %s skipped (%.2f) [%s, focus=%s, trousers=%s, topics=%s]: %s",
+                log.info("post %s skipped (%.2f) [%s, focus=%s, trousers=%s, ai=%s, audience=%s, excl=%s]: %s",
                          p["id"], s["relevance"], p["category"], sig["clothing_focus"],
-                         sig["trousers_visible"], ",".join(sig["topics"]) or "-", s["reason"])
+                         sig["trousers_visible"], sig["ai_generated"], sig.get("audience"),
+                         sig["exclusion"], s["reason"])
+                if sig["ai_generated"]:
+                    run.add("ai_flagged")
                 continue
             comments, rejected = llm.draft(p, s, tone, recent, p["category"])
             run.add("drafts_rejected", len(rejected))
