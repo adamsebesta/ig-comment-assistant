@@ -62,7 +62,8 @@ rollout: build
 	@# Wait until the old Pod is gone too: `exec deploy/web` can otherwise land on
 	@# the terminating one and get killed mid-command (exit 137).
 	$(KUBECTL) -n $(NS) rollout status deploy/web --timeout=180s
-	$(KUBECTL) -n $(NS) wait --for=delete pod -l app=web --field-selector=status.phase!=Running --timeout=60s 2>/dev/null || true
+	@# A terminating Pod still reports phase Running, so wait until exactly one web Pod is left.
+	@for i in $$(seq 1 60); do [ $$($(KUBECTL) -n $(NS) get pods -l app=web --no-headers | wc -l) -eq 1 ] && break; sleep 2; done
 
 ## ----- Using it -----
 

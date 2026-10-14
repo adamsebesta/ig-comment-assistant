@@ -78,10 +78,22 @@ class MetaClient:
         return data[0]["id"] if data else None
 
     def hashtag_recent(self, hashtag_id, limit):
-        return self._get(
-            f"{hashtag_id}/recent_media",
-            user_id=config.IG_USER_ID, fields=HASHTAG_MEDIA_FIELDS, limit=limit,
-        ).get("data", [])
+        try:
+            return self._get(
+                f"{hashtag_id}/recent_media",
+                user_id=config.IG_USER_ID, fields=HASHTAG_MEDIA_FIELDS, limit=limit,
+            ).get("data", [])
+        except MetaError as e:
+            # Busy tags full of big carousels (#sprezzatura) fail with code 1
+            # "reduce the amount of data". Retry once smaller: fewer posts, and
+            # carousel slides only as far as the first image.
+            if e.code != 1:
+                raise
+            return self._get(
+                f"{hashtag_id}/recent_media", user_id=config.IG_USER_ID, limit=max(1, limit // 2),
+                fields=HASHTAG_MEDIA_FIELDS.replace("children{media_type,media_url}",
+                                                    "children.limit(1){media_type,media_url}"),
+            ).get("data", [])
 
     def download(self, url):
         # Signed CDN URL that expires within days, so grab the bytes now.
