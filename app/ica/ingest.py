@@ -99,10 +99,16 @@ def main():
         "normal": config.NORMAL_INTERVAL_MIN, "limit": config.MAX_CALLS_PER_RUN,
     }).fetchall()
     log.info("%d sources due", len(due))
+    with db.Run(conn, "ingest") as run:
+        poll(conn, client, due, run)
 
+
+def poll(conn, client, due, run):
+    run.set("due", len(due))
     for i, src in enumerate(due):
         if client.usage >= config.USAGE_CEILING:
             log.warning("X-App-Usage at %s%%, stopping run early", client.usage)
+            run.set("stopped", f"usage {client.usage}%")
             break
         if i:
             time.sleep(config.PACE_SECONDS)
@@ -111,10 +117,13 @@ def main():
             media_count, media, owner = fetch(conn, client, src)
         except MetaError as e:
             log.error("%s: %s", label, e)
+            run.add("errors")
+            run.set("last_error", f"{label}: {e}")
             conn.execute("UPDATE sources SET last_polled = now(), last_error = %s WHERE id = %s",
                          (str(e), src["id"]))
             if e.throttled:
                 log.warning("throttled, stopping run")
+                run.set("stopped", "throttled")
                 break
             continue
         n = store(conn, client, src, media, owner)
@@ -124,6 +133,11 @@ def main():
             (media_count, src["id"]),
         )
         log.info("%s: %d new posts (usage %s%%)", label, n, client.usage)
+        run.add("checked")
+        run.add("new_posts", n)
+        run.set("usage", client.usage)
+        if n:
+            run.set("found", run.summary.get("found", []) + [f"{label} ({n})"])
 
 
 if __name__ == "__main__":

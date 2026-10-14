@@ -85,3 +85,15 @@ ALTER TABLE sources ADD COLUMN IF NOT EXISTS category text NOT NULL DEFAULT 'gen
 -- The model's raw answers behind each score, so a bad score can be traced
 -- to the specific question it got wrong.
 ALTER TABLE posts ADD COLUMN IF NOT EXISTS signals jsonb;
+
+-- v3: one row per ingest/worker run, for the Activity page. Logs live in Pods
+-- that get cleaned up after a day; this is the durable, human-readable record.
+CREATE TABLE IF NOT EXISTS runs (
+    id          serial PRIMARY KEY,
+    job         text NOT NULL,             -- ingest | worker
+    started_at  timestamptz NOT NULL DEFAULT now(),
+    finished_at timestamptz,
+    summary     jsonb NOT NULL DEFAULT '{}',
+    error       text
+);
+CREATE INDEX IF NOT EXISTS runs_started_idx ON runs (started_at DESC);

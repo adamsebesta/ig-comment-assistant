@@ -54,10 +54,15 @@ spec:
             requests:
               cpu: "2"
               memory: 4Gi
+            # CPU limit: without one, CPU inference takes every core on the node and
+            # starves its neighbours. Postgres's 1s readiness probe then timed out
+            # (245 times in 49 min), it went unready, and its Service refused
+            # connections. 6 of 8 cores leaves room for everything else.
             # 7B vision model + 8k context needs ~9 GiB. Both kind nodes share
             # Docker Desktop's VM (~12 GiB here), so 10Gi is the practical ceiling;
             # give Docker 16 GB if anything else starts getting evicted.
             limits:
+              cpu: "6"
               memory: 10Gi
           volumeMounts:
             - name: models

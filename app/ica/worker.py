@@ -53,7 +53,14 @@ def main():
         "ORDER BY decided_at DESC LIMIT 15"
     )]
 
+    with db.Run(conn, "worker") as run:
+        run.set("model", config.OLLAMA_MODEL)
+        score_all(conn, posts, tone, recent, run)
+
+
+def score_all(conn, posts, tone, recent, run):
     for p in posts:
+        run.add("scored")
         try:
             s = llm.score(p, tone, p["category"])
             relevant = s["relevance"] >= config.RELEVANCE_THRESHOLD
@@ -64,12 +71,14 @@ def main():
                  "scored" if relevant else "skipped", p["id"]),
             )
             if not relevant:
+                run.add("skipped")
                 sig = s["signals"]
                 log.info("post %s skipped (%.2f) [%s, focus=%s, trousers=%s, topics=%s]: %s",
                          p["id"], s["relevance"], p["category"], sig["clothing_focus"],
                          sig["trousers_visible"], ",".join(sig["topics"]) or "-", s["reason"])
                 continue
             comments, rejected = llm.draft(p, s, tone, recent, p["category"])
+            run.add("drafts_rejected", len(rejected))
             for text, why in rejected:
                 log.info("post %s draft rejected (%s): %s", p["id"], why, text)
             for c in comments:
@@ -78,11 +87,13 @@ def main():
                     (p["id"], c, llm.PROMPT_VERSION, config.OLLAMA_MODEL),
                 )
             conn.execute("UPDATE posts SET status = 'ready' WHERE id = %s", (p["id"],))
+            run.add("queued")
             log.info("post %s ready (%.2f) with %d drafts", p["id"], s["relevance"], len(comments))
         except Exception:
             # Mark it rather than retry forever. Requeue by hand:
             # UPDATE posts SET status='new' WHERE status='error';
             log.exception("post %s failed", p["id"])
+            run.add("errors")
             conn.execute("UPDATE posts SET status = 'error' WHERE id = %s", (p["id"],))
 
 

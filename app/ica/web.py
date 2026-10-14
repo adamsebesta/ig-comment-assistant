@@ -171,3 +171,27 @@ def delete_source(source_id: int):
     with db.connect() as conn:
         conn.execute("DELETE FROM sources WHERE id = %s", (source_id,))
     return back("/sources")
+
+
+@app.get("/activity")
+def activity(request: Request):
+    with db.connect() as conn:
+        runs = conn.execute(
+            "SELECT job, started_at, finished_at, summary, error, "
+            "extract(epoch FROM coalesce(finished_at, now()) - started_at)::int AS secs "
+            "FROM runs ORDER BY started_at DESC LIMIT 40"
+        ).fetchall()
+        statuses = {r["status"]: r["n"] for r in conn.execute(
+            "SELECT status, count(*) AS n FROM posts GROUP BY 1")}
+        sources = conn.execute(
+            "SELECT count(*) FILTER (WHERE active) AS active, "
+            "count(*) FILTER (WHERE active AND last_polled IS NULL) AS never, "
+            "count(*) FILTER (WHERE last_error IS NOT NULL) AS failing FROM sources"
+        ).fetchone()
+        new_24h = conn.execute(
+            "SELECT count(*) AS n FROM posts WHERE created_at > now() - interval '24 hours'"
+        ).fetchone()["n"]
+    return templates.TemplateResponse(request, "activity.html", {
+        "runs": runs, "statuses": statuses, "sources": sources, "new_24h": new_24h,
+        "model": config.OLLAMA_MODEL,
+    })

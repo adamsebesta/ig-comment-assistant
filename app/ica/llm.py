@@ -14,7 +14,7 @@ from PIL import Image
 
 from . import config
 
-PROMPT_VERSION = "v7"  # bump when prompts change, so decisions can be compared per version
+PROMPT_VERSION = "v8"  # bump when prompts change, so decisions can be compared per version
 
 MOODS = ["celebratory", "debate", "product", "news", "instructional", "humour", "other"]
 
@@ -113,12 +113,14 @@ Rules:
 - Add value: an observation, a specific compliment, a detail about cut, cloth or fit, or a genuine question.
 - Never mention the brand, never sell, no links, at most one emoji, and only one that fits golf or clothing.
 - No hashtags, unless the Voice section allows a signature tag.
-- Under 80 characters each. No filler phrases.
+- Write how a real person types an Instagram comment: 2 to 12 words, casual, fragments are
+  fine, lowercase is fine. Not a polished sentence, not a caption, not a review.
+- No em dashes, no semicolons, no filler phrases.
 - Carry the brand's beliefs in your own fresh words. Never copy phrases from the brand
   context, the example comments, the caption or our recent comments.
 - Match the post's mood. In a debate, take a considered position without being combative."""
 
-MAX_DRAFT_CHARS = 120  # hard ceiling enforced in code; the prompt asks for 80
+MAX_DRAFT_CHARS = 70  # hard ceiling; real comments are short (ours: 12-65 chars)
 NGRAM = 4  # sharing this many consecutive words with the tone file = verbatim copy
 # Short example comments are templates the model loves to reword ("relaxed fit,
 # relaxed vibe"), so against those a 3-word overlap already counts as a copy.
@@ -150,6 +152,11 @@ def check_draft(text, corpus_ngrams, corpus_lines=frozenset()):
         return "exact copy of an example or recent comment"
     if len(text) > MAX_DRAFT_CHARS:
         return f"too long ({len(text)} chars)"
+    # Em dashes and semicolons are the classic tells of machine-written text.
+    if re.search("[\u2014\u2013;]", text):
+        return "em dash or semicolon"
+    if len(re.findall(r"[.!?]+(?=\s|$)", text)) > 2:
+        return "more than 2 sentences"
     # Corpus holds 4-grams (whole tone file) and 3-grams (short examples); match both.
     copied = (_ngrams(text) | _ngrams(text, EXAMPLE_NGRAM)) & corpus_ngrams
     if copied:

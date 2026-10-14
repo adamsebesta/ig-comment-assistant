@@ -52,9 +52,13 @@ spec:
             exec:
               command: ["pg_isready", "-U", "ica"]
             periodSeconds: 5
+            # Default timeout is 1s. Under CPU contention that's too tight: an unready
+            # Pod is pulled from the Service, so a briefly slow DB looks like a dead one.
+            timeoutSeconds: 5
+            failureThreshold: 3
           resources:
             requests:
-              cpu: 100m
+              cpu: 250m  # CPU is shared by request weight under contention; 100m lost to Ollama's 2
               memory: 256Mi
             limits:
               memory: 1Gi

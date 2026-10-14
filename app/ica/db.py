@@ -32,3 +32,32 @@ def hashtag_in_window(conn, tag):
         "AND queried_at > now() - interval '7 days' LIMIT 1",
         (tag,),
     ).fetchone() is not None
+
+
+class Run:
+    """Records a job run in the runs table: `with Run(conn, "ingest") as run:`
+    then run.add(key, n) / run.set(key, value). Saves even if the job crashes."""
+
+    def __init__(self, conn, job):
+        self.conn, self.job, self.summary = conn, job, {}
+
+    def __enter__(self):
+        self.id = self.conn.execute(
+            "INSERT INTO runs (job) VALUES (%s) RETURNING id", (self.job,)
+        ).fetchone()["id"]
+        return self
+
+    def add(self, key, n=1):
+        self.summary[key] = self.summary.get(key, 0) + n
+
+    def set(self, key, value):
+        self.summary[key] = value
+
+    def __exit__(self, exc_type, exc, tb):
+        from psycopg.types.json import Jsonb
+        self.conn.execute(
+            "UPDATE runs SET finished_at = now(), summary = %s, error = %s WHERE id = %s",
+            (Jsonb(self.summary), f"{exc_type.__name__}: {exc}" if exc else None, self.id),
+        )
+        self.conn.execute("DELETE FROM runs WHERE started_at < now() - interval '14 days'")
+        return False
