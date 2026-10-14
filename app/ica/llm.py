@@ -14,7 +14,7 @@ from PIL import Image
 
 from . import config
 
-PROMPT_VERSION = "v6"  # bump when prompts change, so decisions can be compared per version
+PROMPT_VERSION = "v7"  # bump when prompts change, so decisions can be compared per version
 
 MOODS = ["celebratory", "debate", "product", "news", "instructional", "humour", "other"]
 
@@ -108,8 +108,10 @@ DRAFT_RULES = """
 Write Instagram comments for the brand account to post on this post, one per register
 named below, as described in the Voice section above.
 Rules:
+- Be specific: name something actually in this post (a garment, a colour, a cloth, the setting,
+  a named item from the caption). A comment that could sit under any post is a failure.
 - Add value: an observation, a specific compliment, a detail about cut, cloth or fit, or a genuine question.
-- Never mention the brand, never sell, no links, at most one emoji.
+- Never mention the brand, never sell, no links, at most one emoji, and only one that fits golf or clothing.
 - No hashtags, unless the Voice section allows a signature tag.
 - Under 80 characters each. No filler phrases.
 - Carry the brand's beliefs in your own fresh words. Never copy phrases from the brand
@@ -118,6 +120,12 @@ Rules:
 
 MAX_DRAFT_CHARS = 120  # hard ceiling enforced in code; the prompt asks for 80
 NGRAM = 4  # sharing this many consecutive words with the tone file = verbatim copy
+# Short example comments are templates the model loves to reword ("relaxed fit,
+# relaxed vibe"), so against those a 3-word overlap already counts as a copy.
+EXAMPLE_NGRAM = 3
+CLICHES = re.compile(r"(?i)\b(game[- ]changer|seamless(ly)?|elevate[sd]?|next level|on point|"
+                     r"effortless(ly)?|timeless elegance|must[- ]have)\b")
+OFF_TOPIC_EMOJI = re.compile("[\U0001F3BE\U0001F3C0\U0001F3C8\U0001F3D0\u26BD\u26BE\U0001F3D2\U0001F3D3\U0001F3F8\U0001F94E]")
 
 
 def _words(text):
@@ -142,11 +150,16 @@ def check_draft(text, corpus_ngrams, corpus_lines=frozenset()):
         return "exact copy of an example or recent comment"
     if len(text) > MAX_DRAFT_CHARS:
         return f"too long ({len(text)} chars)"
-    copied = _ngrams(text) & corpus_ngrams
+    # Corpus holds 4-grams (whole tone file) and 3-grams (short examples); match both.
+    copied = (_ngrams(text) | _ngrams(text, EXAMPLE_NGRAM)) & corpus_ngrams
     if copied:
         return "copies '" + " ".join(next(iter(copied))) + "'"
     if re.search(r"(?i)\b(sale|discount|shop|link in bio|dm us)\b", text):
         return "promotional language"
+    if m := CLICHES.search(text):
+        return f"cliché '{m.group(0)}'"
+    if OFF_TOPIC_EMOJI.search(text):
+        return "emoji from another sport"
     return None
 
 
@@ -209,6 +222,10 @@ def draft(post, scored, tone, recent, category="general"):
     corpus = _ngrams(tone) | _ngrams(post["caption"] or "")
     for t in recent:
         corpus |= _ngrams(t)
+    examples = [l.lstrip("-* ").strip() for l in tone.split("# Example comments", 1)[-1].splitlines()]
+    examples += re.findall(r'"([^"]+)"', tone.split("# Never", 1)[0]) + list(recent)
+    for e in examples:
+        corpus |= _ngrams(e, EXAMPLE_NGRAM)
     lines = {_norm(l.lstrip("-* ").strip('"')) for l in tone.splitlines() + list(recent)}
     lines |= {_norm(q) for q in re.findall(r'"([^"]+)"', tone)}
     lines.discard("")

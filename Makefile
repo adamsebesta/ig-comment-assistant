@@ -59,6 +59,10 @@ model:
 # changed and Kubernetes won't roll it. Force it.
 rollout: build
 	$(KUBECTL) -n $(NS) rollout restart deploy/web
+	@# Wait until the old Pod is gone too: `exec deploy/web` can otherwise land on
+	@# the terminating one and get killed mid-command (exit 137).
+	$(KUBECTL) -n $(NS) rollout status deploy/web --timeout=180s
+	$(KUBECTL) -n $(NS) wait --for=delete pod -l app=web --field-selector=status.phase!=Running --timeout=60s 2>/dev/null || true
 
 ## ----- Using it -----
 
