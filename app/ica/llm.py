@@ -84,6 +84,11 @@ AI_CAPTION = re.compile(r"(?i)(#ai(art|generated|model|influencer|fashion|photog
 # checks make the trouser and advert signals deterministic.
 TROUSER_CAPTION = re.compile(r"(?i)\b(trousers?|pants|slacks|chinos?|corduroys?|cords|pleat(s|ed)?|"
                              r"high[- ]waist(ed)?|wide[- ]leg|straight[- ]leg|turn[- ]?ups?|drape[sd]?)\b")
+# The model over-calls "clothing_debate" (it flagged a club-selection interview), so a
+# debate only counts if the caption itself talks about clothes or style.
+CLOTHING_CAPTION = re.compile(r"(?i)\b(style|stylish|outfits?|look(s|ed)?|fit(s)?|wore|wears?|wearing|dress(ed)?|"
+                              r"dress[- ]code|fashion|kit|attire|shirts?|polos?|mock[- ]?necks?|sweaters?|"
+                              r"knit(wear)?|jackets?|shoes|trousers?|pants|shorts|caps?|hats?|threads|drip)\b")
 AD_CAPTION = re.compile(r"(?i)(\b(our|the) (next|new|latest) (collection|drop|release)\b|\bshop (now|the look)\b|"
                         r"\blink in (bio|profile)\b|\bpre-?order\b|\buse code\b|\bavailable now\b|"
                         r"\bdrops? (on|this|today|tomorrow|friday|monday)\b|\bnew arrivals?\b|% off\b)")
@@ -272,6 +277,9 @@ def score(post, tone="", category="general"):
             sig["topics"].append("trousers_and_fit")
         if not post["image"] and sig["clothing_focus"] != "central":
             sig["clothing_focus"] = "central"  # caption-only post about trousers: the caption IS the subject
+    if sig.get("clothing_debate") and not CLOTHING_CAPTION.search(caption):
+        sig["clothing_debate"] = False
+        sig["debate_overruled"] = True  # model said debate, caption isn't about clothes
     if AD_CAPTION.search(caption) and sig["exclusion"] == "none":
         sig["exclusion"] = "competitor_ad"
         sig["caption_ad"] = True
