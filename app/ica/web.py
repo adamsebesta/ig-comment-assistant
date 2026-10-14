@@ -40,9 +40,11 @@ def queue(request: Request):
         posts = conn.execute(
             "SELECT p.id, owner, caption, media_type, permalink, posted_at, like_count, "
             "comments_count, relevance, mood, score_reason, signals, image IS NOT NULL AS has_image, "
+            "extract(epoch FROM now() - posted_at)::int AS age_s, "
             "COALESCE(s.category, 'general') AS category "
             "FROM posts p LEFT JOIN sources s ON s.id = p.source_id "
-            "WHERE status = 'ready' ORDER BY relevance DESC, posted_at DESC"
+            # Newest first: comments posted early sit at the top of a post's thread.
+            "WHERE status = 'ready' ORDER BY posted_at DESC"
         ).fetchall()
         for p in posts:
             p["drafts"] = conn.execute(

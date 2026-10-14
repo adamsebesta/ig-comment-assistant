@@ -14,7 +14,7 @@ from PIL import Image
 
 from . import config
 
-PROMPT_VERSION = "v9"  # bump when prompts change, so decisions can be compared per version
+PROMPT_VERSION = "v10"  # bump when prompts change, so decisions can be compared per version
 
 MOODS = ["celebratory", "debate", "product", "news", "instructional", "humour", "other"]
 
@@ -90,17 +90,14 @@ def relevance(sig, category):
         return 0.1  # menswear brand: womenswear-only posts aren't our conversation
     n = len(set(sig["topics"]))
     central = sig["clothing_focus"] == "central"
-    if category == "style":
-        if not central:
-            return 0.1
-        if not (sig["trousers_visible"] or "full_outfit" in sig["topics"]):
-            return 0.3
-        return min(1.0, 0.7 + 0.1 * n)
-    if central:
-        return min(1.0, (0.7 if category == "brand" else 0.6) + 0.1 * n)
-    if sig["clothing_focus"] == "incidental":
-        return min(0.5, 0.2 + 0.1 * n)
-    return 0.0
+    # Trouser-centred brand: every pillar needs trousers on show or under discussion.
+    trousers = sig["trousers_visible"] or "trousers_and_fit" in sig["topics"]
+    if not central:
+        return 0.1 if category == "style" else min(0.5, 0.2 + 0.1 * n) if sig["clothing_focus"] == "incidental" else 0.0
+    if not trousers:
+        return 0.4  # clothing post, but not about trousers: below the 0.6 threshold
+    base = {"style": 0.7, "brand": 0.7}.get(category, 0.6)
+    return min(1.0, base + 0.1 * n)
 
 
 STANCES = {

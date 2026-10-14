@@ -4,7 +4,9 @@
 {% for p in posts %}
 <div class="card">
   <div class="meta">
-    {{ "@" ~ p.owner if p.owner else "hashtag result" }} · {{ p.media_type }} · {{ p.posted_at.strftime("%d %b %H:%M") }}
+    {% set mins = p.age_s // 60 %}
+    <strong{% if mins < 120 %} style="color:var(--accent)"{% endif %}>{% if mins < 60 %}{{ mins }}m ago{% elif mins < 2880 %}{{ mins // 60 }}h ago{% else %}{{ mins // 1440 }}d ago{% endif %}</strong>
+    · {{ "@" ~ p.owner if p.owner else "hashtag result" }} · {{ p.media_type }}
     · {{ p.like_count if p.like_count is not none else "?" }} likes · {{ p.comments_count }} comments
     · {{ p.category }} · relevance {{ "%.2f"|format(p.relevance) }} · {{ p.mood }}
     {% if p.signals %}· {{ p.signals.clothing_focus }}{% if p.signals.topics %} · {{ p.signals.topics|join(", ") }}{% endif %}{% endif %}

@@ -22,7 +22,7 @@ data:
   USAGE_CEILING: "75"
   HOT_INTERVAL_MIN: "15"
   NORMAL_INTERVAL_MIN: "360"
-  HASHTAG_INTERVAL_MIN: "120"
+  HASHTAG_INTERVAL_MIN: "60"   # freshness matters (first comments sit on top); ~4% budget per hashtag call
   MAX_POST_AGE_HOURS: "48"
   RELEVANCE_THRESHOLD: "0.6"
   WORKER_BATCH: "30"   # model on the Mac GPU: ~20 s/post incl. drafting, so 30 fits the 30-min schedule
