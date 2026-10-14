@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: ica
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: web
+          image: ica:dev
+          # Never: the image only exists inside kind (`make build` loads it).
+          # Pulling would fail because there's no registry. On EKS: ECR + a real tag.
+          imagePullPolicy: Never
+          envFrom:
+            - configMapRef:
+                name: ica-config
+            - secretRef:
+                name: ica-secrets
+          # Tone file mounted here too, for `make eval` (runs via exec in this Pod).
+          volumeMounts:
+            - name: tone
+              mountPath: /config
+              readOnly: true
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: tone
+          configMap:
+            name: ica-tone
+            optional: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: ica
+spec:
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: 8000

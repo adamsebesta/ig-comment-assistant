@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block body %}
+<h2>Sources</h2>
+<p class="meta">Hashtag budget: <strong>{{ used }} / {{ budget }}</strong> unique hashtags used in the last 7 days.
+A new hashtag holds its slot for 7 days after its first query.</p>
+
+<form method="post" action="/sources" class="card">
+  <div class="row">
+    <select name="kind"><option value="handle">Handles</option><option value="hashtag">Hashtags</option></select>
+    <select name="category"><option value="general">Golf content (media, tours)</option><option value="brand">Adjacent brand (appreciate)</option><option value="style">Influencer / golfer (outfit posts)</option></select>
+    <select name="tier"><option value="normal">Normal (every 6h)</option><option value="hot">Hot (every 15 min)</option></select>
+  </div>
+  <textarea name="values" rows="4" placeholder="One per line or comma-separated. @ and # are stripped." style="margin-top:8px"></textarea>
+  <div class="row"><button>Add</button><span class="meta">Handles must be Business or Creator accounts.</span></div>
+</form>
+
+<table>
+  <tr><th>Source</th><th>Category</th><th>Tier</th><th>Last polled</th><th></th></tr>
+  {% for s in rows %}
+  <tr>
+    <td>{{ "@" if s.kind == "handle" else "#" }}{{ s.value }}
+      {% if s.last_error %}<div class="err">{{ s.last_error }}</div>{% endif %}</td>
+    <td class="meta">{{ s.category }}</td>
+    <td class="meta">{{ s.tier if s.kind == "handle" else "every 2h" }}</td>
+    <td class="meta">{{ s.last_polled.strftime("%d %b %H:%M") if s.last_polled else "never" }}</td>
+    <td><form method="post" action="/sources/{{ s.id }}/toggle">
+      <button class="ghost">{{ "Pause" if s.active else "Resume" }}</button></form></td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,85 @@
+# Plain CronJobs for the MVP. On EKS these become one Argo Workflows
+# CronWorkflow (ingest -> score -> draft -> notify) so steps can depend on
+# each other and the GPU only spins up when there's work.
+#
+# concurrencyPolicy: Forbid. If a run overlaps the next schedule (slow CPU
+# inference, Meta latency), skip rather than run two at once. Two ingest runs
+# in parallel would double the API call rate, which is what we're pacing to avoid.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ingest
+  namespace: ica
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0           # no automatic retries against Meta; the next run is 15 min away
+      activeDeadlineSeconds: 600
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: ingest
+              image: ica:dev
+              imagePullPolicy: Never
+              command: ["python", "-m", "ica.ingest"]
+              envFrom:
+                - configMapRef:
+                    name: ica-config
+                - secretRef:
+                    name: ica-secrets
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  memory: 512Mi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: worker
+  namespace: ica
+spec:
+  schedule: "*/30 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1700  # just under the 30-min schedule
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: worker
+              image: ica:dev
+              imagePullPolicy: Never
+              command: ["python", "-m", "ica.worker"]
+              envFrom:
+                - configMapRef:
+                    name: ica-config
+                - secretRef:
+                    name: ica-secrets
+              volumeMounts:
+                - name: tone
+                  mountPath: /config
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  memory: 512Mi
+          volumes:
+            - name: tone
+              configMap:
+                name: ica-tone  # created from seeds/tone.md by `make tone`
+                optional: true  # worker logs a warning and drafts without it

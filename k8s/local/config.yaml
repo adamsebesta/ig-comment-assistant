@@ -1,0 +1,28 @@
+# Non-secret tunables, read as env vars by every component (envFrom).
+# Credentials live in the ica-secrets Secret (`make secrets`), never here.
+# Changing a value: edit, `make deploy`, then `kubectl -n ica rollout restart
+# deploy/web`. CronJobs pick it up on their next run because each Job is a new
+# Pod. A running Deployment's env is fixed at Pod start, unlike ECS where a
+# new task definition revision forces the redeploy.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ica-config
+  namespace: ica
+data:
+  OLLAMA_URL: "http://ollama:11434"
+  OLLAMA_MODEL: "qwen2.5vl:7b"   # 3B answered "incidental" for everything (eval 2026-10-14); 7B caught the clothing-central post
+  LLM_NUM_CTX: "8192"
+  IMAGE_MAX_PX: "768"
+  GRAPH_VERSION: ""
+  MAX_CALLS_PER_RUN: "5"   # measured ~2.8% of hourly budget per call (2026-10-14) => ~36 calls/h; 5 x 4 runs = 20/h (~56%)
+  PACE_SECONDS: "10"
+  USAGE_CEILING: "75"
+  HOT_INTERVAL_MIN: "15"
+  NORMAL_INTERVAL_MIN: "360"
+  HASHTAG_INTERVAL_MIN: "120"
+  MAX_POST_AGE_HOURS: "48"
+  RELEVANCE_THRESHOLD: "0.6"
+  WORKER_BATCH: "6"   # 7B on CPU is ~2-3 min/post; keep a run under the 30-min schedule
+  RETENTION_DAYS: "90"
+  TONE_FILE: "/config/tone.md"

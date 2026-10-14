@@ -1,0 +1,8 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+
+# Brand data stays private even if the repo goes public. Only *.example files are committed.
+seeds/*
+!seeds/*.example.*

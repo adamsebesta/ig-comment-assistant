@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block body %}
+<h2>Review queue ({{ posts|length }})</h2>
+{% for p in posts %}
+<div class="card">
+  <div class="meta">
+    {{ "@" ~ p.owner if p.owner else "hashtag result" }} · {{ p.media_type }} · {{ p.posted_at.strftime("%d %b %H:%M") }}
+    · {{ p.like_count if p.like_count is not none else "?" }} likes · {{ p.comments_count }} comments
+    · {{ p.category }} · relevance {{ "%.2f"|format(p.relevance) }} · {{ p.mood }}
+    {% if p.signals %}· {{ p.signals.clothing_focus }}{% if p.signals.topics %} · {{ p.signals.topics|join(", ") }}{% endif %}{% endif %}
+  </div>
+  {% if p.has_image %}<img src="/image/{{ p.id }}" alt="post image" loading="lazy">{% endif %}
+  <div class="caption">{{ p.caption or "(no caption)" }}</div>
+  <div class="meta">Shows: {{ p.score_reason }} · <a href="{{ p.permalink }}" target="_blank" rel="noopener">open post</a></div>
+
+  {% for d in p.drafts %}
+  <form class="draft" method="post" action="/posts/{{ p.id }}/approve">
+    <input type="hidden" name="draft_id" value="{{ d.id }}">
+    <textarea name="text" rows="2">{{ d.text }}</textarea>
+    <div class="row"><button>Approve this one</button><span class="meta">Edit first if needed; edits are the best training data.</span></div>
+  </form>
+  {% endfor %}
+
+  <form method="post" action="/posts/{{ p.id }}/reject" class="row">
+    <input name="reason" placeholder="Why not? (optional, helps the ranker)" style="flex:1">
+    <button class="warn">Reject</button>
+  </form>
+</div>
+{% else %}
+<p class="meta">Nothing to review. Ingest runs every 15 min, scoring every 30.</p>
+{% endfor %}
+{% endblock %}

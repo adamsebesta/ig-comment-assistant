@@ -1,0 +1,71 @@
+# StatefulSet, not Deployment: it gives the Pod a stable identity (postgres-0)
+# and a PVC per replica via volumeClaimTemplates that survives Pod restarts
+# and rescheduling. On EKS this becomes RDS (managed, via Terraform), and this
+# file goes away.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: ica
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: ica
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          env:
+            - name: POSTGRES_USER
+              value: ica
+            - name: POSTGRES_DB
+              value: ica
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ica-secrets
+                  key: POSTGRES_PASSWORD
+            # Subdirectory: the volume root has lost+found on some
+            # provisioners, and initdb refuses a non-empty directory.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "ica"]
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

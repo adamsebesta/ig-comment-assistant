@@ -1,0 +1,79 @@
+# Local stand-in for vLLM on a Karpenter GPU node. CPU-only, so a 3B vision
+# model takes tens of seconds per post. Fine for a batch job, which is
+# exactly why the pipeline is batch.
+# Model pull is a separate step (`make model`) rather than the playground's
+# initContainer, so a Pod restart never re-triggers a multi-GB download check.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama
+  namespace: ica
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: ica
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # RWO volume: the old Pod must release it before the new one mounts it
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      containers:
+        - name: ollama
+          image: ollama/ollama:latest
+          env:
+            - name: OLLAMA_KEEP_ALIVE
+              value: "30m"
+            # One model in memory at a time. Default keeps several resident; with
+            # 3B still loaded, loading the 7B pushed the Pod past its limit (OOMKilled).
+            - name: OLLAMA_MAX_LOADED_MODELS
+              value: "1"
+            - name: OLLAMA_NUM_PARALLEL
+              value: "1"
+          ports:
+            - containerPort: 11434
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 11434
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "2"
+              memory: 4Gi
+            # 7B vision model + 8k context needs ~9 GiB. Both kind nodes share
+            # Docker Desktop's VM (~12 GiB here), so 10Gi is the practical ceiling;
+            # give Docker 16 GB if anything else starts getting evicted.
+            limits:
+              memory: 10Gi
+          volumeMounts:
+            - name: models
+              mountPath: /root/.ollama
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: ollama
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: ica
+spec:
+  selector:
+    app: ollama
+  ports:
+    - port: 11434

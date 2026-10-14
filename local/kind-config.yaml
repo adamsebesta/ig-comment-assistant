@@ -1,0 +1,9 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ica
+nodes:
+  - role: control-plane
+  - role: worker
+# One worker is enough here: the MVP is about the app loop, not scheduling
+# exercises (the playground covers those). Ollama with a 3B vision model wants
+# ~4-6 GB RAM, so give Docker Desktop at least 8 GB.

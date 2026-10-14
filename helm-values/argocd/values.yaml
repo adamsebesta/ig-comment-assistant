@@ -1,0 +1,10 @@
+# Argo CD on kind, same chart as eks-ai-playground. Kept minimal for a laptop:
+# no HA, no Dex (local admin login only).
+dex:
+  enabled: false
+
+configs:
+  params:
+    # TLS terminates at kubectl port-forward on a laptop; plain HTTP inside is fine
+    # and avoids the self-signed-cert warning on every visit. Never on EKS.
+    server.insecure: true

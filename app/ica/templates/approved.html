@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block body %}
+<h2>Approved, ready to post ({{ rows|length }})</h2>
+<p class="meta">Copy, open the post in Instagram, paste and post it yourself, then mark it posted here.</p>
+{% for r in rows %}
+<div class="card">
+  <div class="caption" id="c{{ r.id }}">{{ r.final_text }}</div>
+  <div class="row">
+    <button class="ghost" onclick="navigator.clipboard.writeText(document.getElementById('c{{ r.id }}').innerText); this.textContent='Copied'">Copy</button>
+    <a href="{{ r.permalink }}" target="_blank" rel="noopener"><button class="ghost" type="button">Open post</button></a>
+    <form method="post" action="/decisions/{{ r.id }}/posted"><button>Mark posted</button></form>
+  </div>
+</div>
+{% else %}
+<p class="meta">Nothing waiting to be posted.</p>
+{% endfor %}
+{% endblock %}

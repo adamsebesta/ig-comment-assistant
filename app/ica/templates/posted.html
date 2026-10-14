@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block body %}
+<h2>Posted</h2>
+<p class="meta">After ~3 days, enter the likes and replies your comment got. The API can't read this for comments on other accounts' posts.</p>
+<table>
+  <tr><th>Comment</th><th>Posted</th><th>Likes / replies</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td><a href="{{ r.permalink }}" target="_blank" rel="noopener">{{ r.final_text }}</a></td>
+    <td class="meta">{{ r.posted_at.strftime("%d %b") }}</td>
+    <td>
+      <form method="post" action="/decisions/{{ r.id }}/outcome" class="row">
+        <input name="likes" type="number" min="0" value="{{ r.likes if r.likes is not none else '' }}" style="width:5em" required>
+        <input name="replies" type="number" min="0" value="{{ r.replies if r.replies is not none else '' }}" style="width:5em" required>
+        <button class="ghost">Save</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

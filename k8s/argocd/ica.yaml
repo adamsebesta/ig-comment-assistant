@@ -1,0 +1,29 @@
+# Argo CD keeps the cluster matching k8s/local/ on the main branch of the
+# GitHub repo. After this exists, `make deploy` is replaced by git push.
+#
+# Not in git, created out-of-band (and therefore ignored by Argo CD):
+#   - ica-secrets (make secrets): credentials never go in git
+#   - ica-tone (make tone): brand voice is private (seeds/ is gitignored)
+#
+# selfHeal: a `kubectl edit` on anything under k8s/local/ gets reverted
+# within ~3 min. Change the YAML and push instead. Unlike ECS, where a
+# console edit to a service just sticks until the next Terraform apply, this
+# is continuous reconciliation, the core idea of GitOps.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ica
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/adamsebesta/ig-comment-assistant.git
+    targetRevision: main
+    path: k8s/local
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ica
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true
