@@ -10,7 +10,9 @@ metadata:
   name: ica-config
   namespace: ica
 data:
-  OLLAMA_URL: "http://ollama:11434"
+  # Full name, not "ollama": Ollama rejects Host headers that aren't localhost, an IP or
+  # *.local/*.internal (DNS-rebinding protection), and the model now runs on the Mac.
+  OLLAMA_URL: "http://ollama.ica.svc.cluster.local:11434"
   OLLAMA_MODEL: "qwen2.5vl:7b"   # 3B answered "incidental" for everything (eval 2026-10-14); 7B caught the clothing-central post
   LLM_NUM_CTX: "8192"
   IMAGE_MAX_PX: "768"
