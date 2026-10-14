@@ -29,6 +29,13 @@ NORMAL_INTERVAL_MIN = _int("NORMAL_INTERVAL_MIN", 360)
 HASHTAG_INTERVAL_MIN = _int("HASHTAG_INTERVAL_MIN", 120)  # recent_media only covers 24h
 HASHTAG_BUDGET = _int("HASHTAG_BUDGET", 30)
 MEDIA_PER_SOURCE = _int("MEDIA_PER_SOURCE", 5)
+# Quality floors. Handle sources: follower count is available, so require it.
+# Hashtag results never include the owner (Meta omits it), so engagement is the
+# proxy: a fresh post needs fewer likes than an old one (being first matters).
+MIN_FOLLOWERS = _int("MIN_FOLLOWERS", 2500)
+HASHTAG_MIN_LIKES = _int("HASHTAG_MIN_LIKES", 10)       # cap: what an hours-old post needs
+HASHTAG_LIKES_PER_HOUR = _float("HASHTAG_LIKES_PER_HOUR", 6)
+HASHTAG_MIN_COMMENTS = _int("HASHTAG_MIN_COMMENTS", 2)  # or this many comments
 MAX_POST_AGE_HOURS = _int("MAX_POST_AGE_HOURS", 48)  # older posts aren't worth a comment
 
 # --- Model ---

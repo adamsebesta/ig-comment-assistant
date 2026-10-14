@@ -5,6 +5,7 @@ PACE_SECONDS apart, and stops early on throttling or high X-App-Usage.
 Bursting all sources at once is what gets an app throttled.
 """
 import logging
+
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -39,12 +40,26 @@ def pick_image(m):
     return None
 
 
-def store(conn, client, src, media, owner):
+def engaged_enough(m, posted_at):
+    """Hashtag-post quality floor. Likes needed grow with age, capped at
+    HASHTAG_MIN_LIKES: 20 min old needs 2 likes, 2 h old needs 10."""
+    likes, comments = m.get("like_count"), m.get("comments_count") or 0
+    if likes is None or comments >= config.HASHTAG_MIN_COMMENTS:
+        return True  # hidden like count: can't judge, let the scorer decide
+    age_h = (datetime.now(timezone.utc) - posted_at).total_seconds() / 3600
+    return likes >= min(config.HASHTAG_MIN_LIKES, max(1, round(age_h * config.HASHTAG_LIKES_PER_HOUR)))
+
+
+def store(conn, client, src, media, owner, run=None):
     cutoff = datetime.now(timezone.utc) - timedelta(hours=config.MAX_POST_AGE_HOURS)
     new = 0
     for m in media:
         posted_at = datetime.strptime(m["timestamp"], "%Y-%m-%dT%H:%M:%S%z")
         if posted_at < cutoff:
+            continue
+        if src["kind"] == "hashtag" and not engaged_enough(m, posted_at):
+            if run:
+                run.add("low_engagement")
             continue
         if conn.execute("SELECT 1 FROM posts WHERE media_id = %s", (m["id"],)).fetchone():
             continue
@@ -71,6 +86,8 @@ def fetch(conn, client, src):
     """Returns (media_count, media, owner) for one source."""
     if src["kind"] == "handle":
         media_count, media = client.business_discovery(src["value"], config.MEDIA_PER_SOURCE)
+        if (client.last_followers or 0) < config.MIN_FOLLOWERS:
+            raise MetaError(None, None, f"only {client.last_followers} followers (minimum {config.MIN_FOLLOWERS}); skipped")
         return media_count, media, src["value"]
 
     tag = src["value"]
@@ -126,7 +143,7 @@ def poll(conn, client, due, run):
                 run.set("stopped", "throttled")
                 break
             continue
-        n = store(conn, client, src, media, owner)
+        n = store(conn, client, src, media, owner, run)
         conn.execute(
             """UPDATE sources SET last_polled = now(), last_error = NULL,
                    last_media_count = COALESCE(%s, last_media_count) WHERE id = %s""",

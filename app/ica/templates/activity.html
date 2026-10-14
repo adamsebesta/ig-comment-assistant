@@ -33,6 +33,7 @@
       {% if r.job == "ingest" %}
         checked {{ s.get('checked', 0) }}/{{ s.get('due', 0) }} · <strong>{{ s.get('new_posts', 0) }} new</strong>
         {% if s.get('usage') is not none %}· API usage {{ s.usage }}%{% endif %}
+        {% if s.get('low_engagement') %}· {{ s.low_engagement }} hashtag posts below the engagement floor{% endif %}
         {% if s.get('found') %}<div class="meta">{{ s.found|join(", ") }}</div>{% endif %}
         {% if s.get('stopped') %}<div class="err">stopped early: {{ s.stopped }}</div>{% endif %}
         {% if s.get('last_error') %}<div class="err">{{ s.errors }} error(s), last: {{ s.last_error[:140] }}</div>{% endif %}

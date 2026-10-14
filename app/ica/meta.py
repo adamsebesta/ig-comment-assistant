@@ -44,6 +44,7 @@ class MetaClient:
         self.base = "https://graph.facebook.com" + (f"/{v}" if v else "")
         self.http = httpx.Client(timeout=30)
         self.usage = 0  # highest % reported by X-App-Usage on the last call
+        self.last_followers = None  # set by business_discovery()
 
     def _get(self, path, **params):
         params["access_token"] = config.META_TOKEN
@@ -67,9 +68,10 @@ class MetaClient:
     def business_discovery(self, handle, limit):
         fields = (
             f"business_discovery.username({handle})"
-            f"{{username,media_count,media.limit({limit}){{{MEDIA_FIELDS}}}}}"
+            f"{{username,followers_count,media_count,media.limit({limit}){{{MEDIA_FIELDS}}}}}"
         )
         bd = self._get(config.IG_USER_ID, fields=fields)["business_discovery"]
+        self.last_followers = bd.get("followers_count")
         return bd.get("media_count"), bd.get("media", {}).get("data", [])
 
     def hashtag_id(self, tag):

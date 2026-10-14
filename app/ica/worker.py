@@ -59,45 +59,59 @@ def main():
 
 
 def score_all(conn, posts, tone, recent, run):
+    """Two phases: score every post (vision model), then draft the relevant ones
+    (drafting model). With two models on one GPU, alternating per post would swap
+    them in and out of memory each time; batching means one swap per run."""
+    relevant = []
     for p in posts:
         run.add("scored")
         try:
             s = llm.score(p, tone, p["category"])
-            relevant = s["relevance"] >= config.RELEVANCE_THRESHOLD
-            conn.execute(
-                "UPDATE posts SET relevance = %s, mood = %s, score_reason = %s, signals = %s, model = %s, "
-                "status = %s WHERE id = %s",
-                (s["relevance"], s["mood"], s["reason"], Jsonb(s["signals"]), config.OLLAMA_MODEL,
-                 "scored" if relevant else "skipped", p["id"]),
-            )
-            if not relevant:
-                run.add("skipped")
-                sig = s["signals"]
-                log.info("post %s skipped (%.2f) [%s, focus=%s, trousers=%s, ai=%s, audience=%s, excl=%s]: %s",
-                         p["id"], s["relevance"], p["category"], sig["clothing_focus"],
-                         sig["trousers_visible"], sig["ai_generated"], sig.get("audience"),
-                         sig["exclusion"], s["reason"])
-                if sig["ai_generated"]:
-                    run.add("ai_flagged")
-                continue
-            comments, rejected = llm.draft(p, s, tone, recent, p["category"])
-            run.add("drafts_rejected", len(rejected))
-            for text, why in rejected:
-                log.info("post %s draft rejected (%s): %s", p["id"], why, text)
-            for c in comments:
-                conn.execute(
-                    "INSERT INTO drafts (post_id, text, prompt_version, model) VALUES (%s, %s, %s, %s)",
-                    (p["id"], c, llm.PROMPT_VERSION, config.OLLAMA_MODEL),
-                )
-            conn.execute("UPDATE posts SET status = 'ready' WHERE id = %s", (p["id"],))
-            run.add("queued")
-            log.info("post %s ready (%.2f) with %d drafts", p["id"], s["relevance"], len(comments))
         except Exception:
             # Mark it rather than retry forever. Requeue by hand:
             # UPDATE posts SET status='new' WHERE status='error';
-            log.exception("post %s failed", p["id"])
+            log.exception("post %s failed scoring", p["id"])
             run.add("errors")
             conn.execute("UPDATE posts SET status = 'error' WHERE id = %s", (p["id"],))
+            continue
+        ok = s["relevance"] >= config.RELEVANCE_THRESHOLD
+        conn.execute(
+            "UPDATE posts SET relevance = %s, mood = %s, score_reason = %s, signals = %s, model = %s, "
+            "status = %s WHERE id = %s",
+            (s["relevance"], s["mood"], s["reason"], Jsonb(s["signals"]), config.OLLAMA_MODEL,
+             "scored" if ok else "skipped", p["id"]),
+        )
+        sig = s["signals"]
+        if sig["ai_generated"]:
+            run.add("ai_flagged")
+        if ok:
+            relevant.append((p, s))
+        else:
+            run.add("skipped")
+            log.info("post %s skipped (%.2f) [%s, focus=%s, trousers=%s, ai=%s, audience=%s, excl=%s]: %s",
+                     p["id"], s["relevance"], p["category"], sig["clothing_focus"],
+                     sig["trousers_visible"], sig["ai_generated"], sig.get("audience"),
+                     sig["exclusion"], s["reason"])
+
+    for p, s in relevant:
+        try:
+            comments, rejected = llm.draft(p, s, tone, recent, p["category"])
+        except Exception:
+            log.exception("post %s failed drafting", p["id"])
+            run.add("errors")
+            conn.execute("UPDATE posts SET status = 'error' WHERE id = %s", (p["id"],))
+            continue
+        run.add("drafts_rejected", len(rejected))
+        for text, why in rejected:
+            log.info("post %s draft rejected (%s): %s", p["id"], why, text)
+        for c in comments:
+            conn.execute(
+                "INSERT INTO drafts (post_id, text, prompt_version, model) VALUES (%s, %s, %s, %s)",
+                (p["id"], c, llm.PROMPT_VERSION, config.DRAFT_MODEL or config.OLLAMA_MODEL),
+            )
+        conn.execute("UPDATE posts SET status = 'ready' WHERE id = %s", (p["id"],))
+        run.add("queued")
+        log.info("post %s ready (%.2f) with %d drafts", p["id"], s["relevance"], len(comments))
 
 
 if __name__ == "__main__":
