@@ -14,7 +14,7 @@ from PIL import Image
 
 from . import config
 
-PROMPT_VERSION = "v11"  # bump when prompts change, so decisions can be compared per version
+PROMPT_VERSION = "v12"  # bump when prompts change, so decisions can be compared per version
 
 MOODS = ["celebratory", "debate", "product", "news", "instructional", "humour", "other"]
 
@@ -152,6 +152,9 @@ NGRAM = 4  # sharing this many consecutive words with the tone file = verbatim c
 EXAMPLE_NGRAM = 3
 CLICHES = re.compile(r"(?i)\b(game[- ]changer|seamless(ly)?|elevate[sd]?|next level|on point|"
                      r"effortless(ly)?|timeless elegance|must[- ]have)\b")
+# Emoji the brand would actually use. The 7B model sprinkles random ones (🛌 🕳️ 🎟).
+ALLOWED_EMOJI = set("👖⛳🎯🔥💯👌👏🙌👀✨🔮🍂🤝💪") | {"🏌️", "🏌️‍♂️", "🏌"}
+EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF][\uFE0F\u200D\u2640\u2642\U0001F3FB-\U0001F3FF]*")
 OFF_TOPIC_EMOJI = re.compile("[\U0001F3BE\U0001F3C0\U0001F3C8\U0001F3D0\u26BD\u26BE\U0001F3D2\U0001F3D3\U0001F3F8\U0001F94E]")
 
 
@@ -168,6 +171,14 @@ def _norm(text):
     return " ".join(_words(text))
 
 
+def tidy(text):
+    """Deterministic fixes instead of retries. The model reaches for em dashes no
+    matter what it's told (the classic tell of machine-written text); people type ' - '."""
+    text = text.strip().strip('"').strip()
+    text = re.sub(r"\s*[\u2014\u2013]\s*", " - ", text)
+    return re.sub(r"\s{2,}", " ", text)
+
+
 def check_draft(text, corpus_ngrams, corpus_lines=frozenset()):
     """Returns why a draft is rejected, or None. Enforced in code because a
     prompt can only ask: "never verbatim" has to be checked, not hoped for.
@@ -177,9 +188,8 @@ def check_draft(text, corpus_ngrams, corpus_lines=frozenset()):
         return "exact copy of an example or recent comment"
     if len(text) > MAX_DRAFT_CHARS:
         return f"too long ({len(text)} chars)"
-    # Em dashes and semicolons are the classic tells of machine-written text.
-    if re.search("[\u2014\u2013;]", text):
-        return "em dash or semicolon"
+    if ";" in text:
+        return "semicolon"
     if len(re.findall(r"[.!?]+(?=\s|$)", text)) > 2:
         return "more than 2 sentences"
     # Corpus holds 4-grams (whole tone file) and 3-grams (short examples); match both.
@@ -192,14 +202,18 @@ def check_draft(text, corpus_ngrams, corpus_lines=frozenset()):
         return f"cliché '{m.group(0)}'"
     if OFF_TOPIC_EMOJI.search(text):
         return "emoji from another sport"
+    odd = [e for e in EMOJI.findall(text) if e not in ALLOWED_EMOJI and e.rstrip("\uFE0F") not in ALLOWED_EMOJI]
+    if odd:
+        return f"emoji {odd[0]} doesn't fit"
     return None
 
 
-def chat(messages, schema, temperature):
+def chat(messages, schema, temperature, model=None):
     r = httpx.post(
         f"{config.OLLAMA_URL}/api/chat",
         json={
-            "model": config.OLLAMA_MODEL,
+            "model": model or config.OLLAMA_MODEL,
+            "think": False,  # reasoning models (qwen3) otherwise spend tokens thinking first
             "messages": messages,
             "stream": False,
             "format": schema,
@@ -214,7 +228,7 @@ def chat(messages, schema, temperature):
     return json.loads(r.json()["message"]["content"])
 
 
-def _post_message(post, extra=""):
+def _post_message(post, extra="", image=True):
     text = (
         f"Account: @{post['owner'] or 'unknown (hashtag result)'}\n"
         f"Type: {post['media_type']}"
@@ -222,7 +236,7 @@ def _post_message(post, extra=""):
         + f"\nCaption:\n{post['caption'] or '(none)'}{extra}"
     )
     msg = {"role": "user", "content": text}
-    if post["image"]:
+    if image and post["image"]:
         msg["images"] = [base64.b64encode(_shrink(bytes(post["image"]))).decode()]
     return msg
 
@@ -283,14 +297,18 @@ def draft(post, scored, tone, recent, category="general"):
             f"\nRegisters to write: {', '.join(missing)}"
             f"\n\nRecent comments we've posted (don't repeat them):\n{recent_block}{feedback}"
         )
+        # The drafting model can be a stronger text-only model (DRAFT_MODEL): scoring
+        # needs vision, writing doesn't, since "What the post shows" already describes it.
+        draft_model = config.DRAFT_MODEL or config.OLLAMA_MODEL
         out = chat(
-            [{"role": "system", "content": tone + "\n" + DRAFT_RULES}, _post_message(post, extra)],
+            [{"role": "system", "content": tone + "\n" + DRAFT_RULES},
+             _post_message(post, extra, image=draft_model == config.OLLAMA_MODEL)],
             {**schema, "properties": {r: schema["properties"][r] for r in missing}, "required": missing},
-            0.8,
+            0.8, model=draft_model,
         )
         notes = []
         for r in missing:
-            text = (out.get(r) or "").strip().strip('"')
+            text = tidy(out.get(r) or "")
             why = check_draft(text, corpus, lines) if text else "empty"
             if why:
                 rejected.append((text, why))

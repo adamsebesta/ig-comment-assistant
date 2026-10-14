@@ -34,6 +34,7 @@ MAX_POST_AGE_HOURS = _int("MAX_POST_AGE_HOURS", 48)  # older posts aren't worth 
 # --- Model ---
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://ollama:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5vl:3b")
+DRAFT_MODEL = os.environ.get("DRAFT_MODEL", "")  # empty = same as OLLAMA_MODEL
 LLM_TIMEOUT = _float("LLM_TIMEOUT", 600)  # CPU inference on kind is slow
 LLM_NUM_CTX = _int("LLM_NUM_CTX", 8192)
 IMAGE_MAX_PX = _int("IMAGE_MAX_PX", 768)

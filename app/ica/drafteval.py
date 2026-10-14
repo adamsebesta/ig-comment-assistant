@@ -17,11 +17,13 @@ from .meta import MetaClient
 def main():
     if os.environ.get("EVAL_MODEL"):
         config.OLLAMA_MODEL = os.environ["EVAL_MODEL"]
+    if os.environ.get("EVAL_DRAFT_MODEL"):
+        config.DRAFT_MODEL = os.environ["EVAL_DRAFT_MODEL"]
     items = [i for i in (yaml.safe_load(sys.stdin) or []) if i["label"] == "relevant"]
     tone_path = Path(config.TONE_FILE)
     tone = tone_path.read_text() if tone_path.exists() else ""
     conn, client, cache = db.connect(), MetaClient(), {}
-    print(f"model={config.OLLAMA_MODEL} prompt={llm.PROMPT_VERSION}\n")
+    print(f"score model={config.OLLAMA_MODEL} draft model={config.DRAFT_MODEL or config.OLLAMA_MODEL} prompt={llm.PROMPT_VERSION}\n")
     for item in items:
         post = find_post(conn, client, item, cache)
         if not post:

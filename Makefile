@@ -94,7 +94,7 @@ eval:
 	$(KUBECTL) -n $(NS) exec -i deploy/web -- env EVAL_MODEL=$(EVAL_MODEL) python -m ica.eval < seeds/eval.yaml
 
 draft-eval:
-	$(KUBECTL) -n $(NS) exec -i deploy/web -- env EVAL_MODEL=$(EVAL_MODEL) python -m ica.drafteval < seeds/eval.yaml
+	$(KUBECTL) -n $(NS) exec -i deploy/web -- env EVAL_MODEL=$(EVAL_MODEL) EVAL_DRAFT_MODEL=$(EVAL_DRAFT_MODEL) python -m ica.drafteval < seeds/eval.yaml
 
 psql:
 	$(KUBECTL) -n $(NS) exec -it statefulset/postgres -- psql -U ica ica
