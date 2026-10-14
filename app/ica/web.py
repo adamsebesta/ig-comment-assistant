@@ -162,3 +162,12 @@ def toggle_source(source_id: int):
     with db.connect() as conn:
         conn.execute("UPDATE sources SET active = NOT active WHERE id = %s", (source_id,))
     return back("/sources")
+
+
+@app.post("/sources/{source_id}/delete")
+def delete_source(source_id: int):
+    # Posts already ingested from it stay (posts.source_id -> NULL) so any
+    # pending review or past decision isn't lost; they age out with retention.
+    with db.connect() as conn:
+        conn.execute("DELETE FROM sources WHERE id = %s", (source_id,))
+    return back("/sources")

@@ -23,8 +23,13 @@ A new hashtag holds its slot for 7 days after its first query.</p>
     <td class="meta">{{ s.category }}</td>
     <td class="meta">{{ s.tier if s.kind == "handle" else "every 2h" }}</td>
     <td class="meta">{{ s.last_polled.strftime("%d %b %H:%M") if s.last_polled else "never" }}</td>
-    <td><form method="post" action="/sources/{{ s.id }}/toggle">
-      <button class="ghost">{{ "Pause" if s.active else "Resume" }}</button></form></td>
+    <td><div class="row" style="margin:0">
+      <form method="post" action="/sources/{{ s.id }}/toggle">
+        <button class="ghost">{{ "Pause" if s.active else "Resume" }}</button></form>
+      <form method="post" action="/sources/{{ s.id }}/delete"
+            onsubmit="return confirm('Remove {{ "@" if s.kind == "handle" else "#" }}{{ s.value }}?')">
+        <button class="warn">Remove</button></form>
+    </div></td>
   </tr>
   {% endfor %}
 </table>
