@@ -20,7 +20,7 @@ metadata:
   name: ollama
   namespace: ica
 spec:
-  replicas: 1
+  replicas: 0  # paused: 7B on CPU inside Docker exhausted host memory (2026-10-14)
   strategy:
     type: Recreate  # RWO volume: the old Pod must release it before the new one mounts it
   selector:
@@ -72,13 +72,39 @@ spec:
           persistentVolumeClaim:
             claimName: ollama
 ---
+# The model runs natively on the Mac (Ollama app, Apple GPU via Metal) instead of
+# in this cluster: CPU inference inside Docker's VM took minutes per post and
+# exhausted host memory. Docker Desktop can't pass the Apple GPU into containers.
+#
+# Pods can't resolve Docker Desktop's host.docker.internal name, so this Service
+# has NO selector and a hand-written EndpointSlice pointing at the Mac's address
+# on Docker's network. Apps still call http://ollama:11434, unchanged: only what
+# sits behind the name moved. Same pattern as giving RDS an in-cluster name.
+#
+# To go back in-cluster: delete the EndpointSlice, restore `selector: {app: ollama}`
+# and set the Deployment above to replicas: 1.
 apiVersion: v1
 kind: Service
 metadata:
   name: ollama
   namespace: ica
 spec:
-  selector:
-    app: ollama
   ports:
-    - port: 11434
+    - name: http
+      port: 11434
+      targetPort: 11434
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: ollama-host
+  namespace: ica
+  labels:
+    kubernetes.io/service-name: ollama  # how a slice attaches to its Service
+addressType: IPv4
+ports:
+  - name: http
+    port: 11434
+    protocol: TCP
+endpoints:
+  - addresses: ["192.168.65.254"]  # host.docker.internal on Docker Desktop
