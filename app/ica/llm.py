@@ -14,7 +14,7 @@ from PIL import Image
 
 from . import config
 
-PROMPT_VERSION = "v10"  # bump when prompts change, so decisions can be compared per version
+PROMPT_VERSION = "v11"  # bump when prompts change, so decisions can be compared per version
 
 MOODS = ["celebratory", "debate", "product", "news", "instructional", "humour", "other"]
 
@@ -72,6 +72,16 @@ CATEGORIES = ("general", "brand", "style")
 # because a vision model's AI-image judgement is unreliable on its own.
 AI_CAPTION = re.compile(r"(?i)(#ai(art|generated|model|influencer|fashion|photography|girl|beauty)?\b|\bai[- ]generated\b|\bvirtual (influencer|model)\b|"
                         r"\bmidjourney\b|\bstable diffusion\b|\bmade with ai\b|\bai (model|art|fashion)\b)")
+
+
+# Hashtag search returns no cover frame for videos, so many posts are caption-only,
+# and a 7B vision model under-weights text when it expects an image. These caption
+# checks make the trouser and advert signals deterministic.
+TROUSER_CAPTION = re.compile(r"(?i)\b(trousers?|pants|slacks|chinos?|corduroys?|cords|pleat(s|ed)?|"
+                             r"high[- ]waist(ed)?|wide[- ]leg|straight[- ]leg|turn[- ]?ups?|drape[sd]?)\b")
+AD_CAPTION = re.compile(r"(?i)(\b(our|the) (next|new|latest) (collection|drop|release)\b|\bshop (now|the look)\b|"
+                        r"\blink in (bio|profile)\b|\bpre-?order\b|\buse code\b|\bavailable now\b|"
+                        r"\bdrops? (on|this|today|tomorrow|friday|monday)\b|\bnew arrivals?\b|% off\b)")
 
 
 def relevance(sig, category):
@@ -231,7 +241,17 @@ def _shrink(raw):
 def score(post, tone="", category="general"):
     sig = chat([{"role": "system", "content": tone + "\n\n" + SCORE_PROMPT}, _post_message(post)], SCORE_SCHEMA, 0)
     sig["topics"] = [t for t in sig["topics"] if t in TOPICS]
-    sig["ai_generated"] = bool(sig.get("looks_ai_generated") or AI_CAPTION.search(post["caption"] or ""))
+    caption = post["caption"] or ""
+    sig["ai_generated"] = bool(sig.get("looks_ai_generated") or AI_CAPTION.search(caption))
+    if TROUSER_CAPTION.search(caption):
+        sig["caption_trousers"] = True
+        if "trousers_and_fit" not in sig["topics"]:
+            sig["topics"].append("trousers_and_fit")
+        if not post["image"] and sig["clothing_focus"] != "central":
+            sig["clothing_focus"] = "central"  # caption-only post about trousers: the caption IS the subject
+    if AD_CAPTION.search(caption) and sig["exclusion"] == "none":
+        sig["exclusion"] = "competitor_ad"
+        sig["caption_ad"] = True
     return {"relevance": relevance(sig, category), "mood": sig["mood"], "reason": sig["reason"], "signals": sig}
 
 
