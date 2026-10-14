@@ -25,6 +25,6 @@ data:
   HASHTAG_INTERVAL_MIN: "120"
   MAX_POST_AGE_HOURS: "48"
   RELEVANCE_THRESHOLD: "0.6"
-  WORKER_BATCH: "6"   # 7B on CPU is ~2-3 min/post; keep a run under the 30-min schedule
+  WORKER_BATCH: "30"   # model on the Mac GPU: ~20 s/post incl. drafting, so 30 fits the 30-min schedule
   RETENTION_DAYS: "90"
   TONE_FILE: "/config/tone.md"
